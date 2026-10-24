@@ -41,3 +41,20 @@ for name, model in models.items():
     scores = -cross_val_score(pipe, X_train, y_train, cv=cv,
                               scoring="neg_mean_absolute_error", n_jobs=1)
     print(f"{name}: MAE = {scores.mean():.4f} ± {scores.std():.4f}")
+
+
+configs = {
+    "hgb_500_lr005": HistGradientBoostingRegressor(max_iter=500, learning_rate=0.05, random_state=42),
+    "hgb_1000_lr005_leaf63": HistGradientBoostingRegressor(max_iter=1000, learning_rate=0.05,
+                                                           max_leaf_nodes=63, random_state=42),
+    "hgb_early_stop": HistGradientBoostingRegressor(max_iter=2000, learning_rate=0.05,
+                                                    max_leaf_nodes=63, early_stopping=True,
+                                                    validation_fraction=0.1, n_iter_no_change=30,
+                                                    random_state=42),
+}
+
+for name, model in configs.items():
+    pipe = Pipeline([("prep", make_prep()), ("model", model)])
+    scores = -cross_val_score(pipe, X_train, y_train, cv=cv,
+                              scoring="neg_mean_absolute_error")
+    print(f"{name}: MAE = {scores.mean():.4f} ± {scores.std():.4f}")
