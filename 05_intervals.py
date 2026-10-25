@@ -47,3 +47,32 @@ inside = (y_val >= pred - q) & (y_val <= pred + q)
 print("q (log scale):", round(q, 4))
 print("Coverage:", inside.mean())
 print("Typical interval width:", round(2 * q, 4))
+
+print(len(X_fit), len(X_cal), len(X_val))
+
+pipe = Pipeline([
+    ("prep", make_prep()),
+    ("model", RandomForestRegressor(n_estimators=100, min_samples_leaf=2, n_jobs=-1, random_state=42)),
+])
+
+pipe.fit(X_fit, y_fit)
+
+cal_pred = pipe.predict(X_cal)
+val_pred = pipe.predict(X_val)
+cal_err = np.abs(y_cal - cal_pred).to_numpy()
+val_err = np.abs(y_val - val_pred).to_numpy()
+
+# 5 groups based on predicted price (edges learned from the calibration set)
+edges = np.quantile(cal_pred, [0.2, 0.4, 0.6, 0.8])
+cal_bin = np.digitize(cal_pred, edges)    # 0,1,2,3,4
+val_bin = np.digitize(val_pred, edges)
+
+# one q per group, from the calibration errors of that group
+q_bins = np.array([np.quantile(cal_err[cal_bin == b], 0.90) for b in range(5)])
+print("q per group:", q_bins.round(3))
+
+# check coverage on the validation set
+inside = val_err <= q_bins[val_bin]
+print("Overall coverage:", inside.mean())
+for b in range(5):
+    print(f"group {b}: coverage = {inside[val_bin == b].mean():.3f}, q = {q_bins[b]:.3f}")
