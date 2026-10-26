@@ -3,3 +3,4 @@ numpy==2.4.6
 scikit-learn==2.4.6
 matplotlib==3.11.1
 matplotlib-inline==0.2.2
+scikit-learn==1.9.1

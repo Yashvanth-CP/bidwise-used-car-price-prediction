@@ -58,6 +58,10 @@ print("Interval coverage on test:", round((test_err <= q_bins[test_bin]).mean(),
 for b in range(5):
     print(f"group {b}: coverage = {(test_err[test_bin == b] <= q_bins[b]).mean():.3f}")
 
+import joblib
+joblib.dump({"pipe": final, "edges": edges, "q_bins": q_bins,
+             "columns": list(X_fit.columns)}, "model.joblib")
+
     # ---------- 5. Charts ----------
 import os
 import matplotlib.pyplot as plt

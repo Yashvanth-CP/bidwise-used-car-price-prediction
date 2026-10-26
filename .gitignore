@@ -4,3 +4,4 @@ __pycache__/
 data/*.csv
 .ipynb_checkpoints/
 .vscode/
+model.joblib
