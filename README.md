@@ -1,191 +1,45 @@
-# Indian Used Car Listings Dataset (57,480 Clean Records | Multi-Source)
+# BidWise: Used-Car Price Prediction with Prediction Intervals
 
-This dataset was created to address a practical gap:  
-**there is no large, clean, India-specific used-car dataset suitable for machine learning price prediction.**
+Predicts Indian used-car prices and returns a 90% price range, not just one number.
 
-Public datasets are typically US-centric, sparsely populated, or filled with missing values.  
-To solve this, a multi-source data collection pipeline was built to extract **structured listing metadata** directly from major Indian automotive marketplaces.
+## Results (held-out test set, 11,475 cars)
+- Typical error: about 17% (test MAE 0.1572 on the log scale)
+- Median error: ₹52,206
+- 90% prediction intervals covered 89.8% of unseen cars
+- Coverage stayed between 88.7% and 90.5% in every price group
 
-The result is a **57,480-row, fully unique, zero-null, ML-ready dataset** covering a wide geographic and brand spectrum across India.
+![Predicted vs actual](reports/figures/pred_vs_actual.png)
+![Interval examples](reports/figures/interval_examples.png)
+![Error by group](reports/figures/error_by_group.png)
+![Model comparison](reports/figures/model_comparison.png)
 
----
+## Model comparison (5-fold CV on the training set, MAE on log price)
+| Model | MAE |
+|---|---|
+| Median baseline | about 0.70 (single split) |
+| Ridge | 0.1621 ± 0.0016 |
+| HistGB (tuned) | 0.1504 ± 0.0015 |
+| Random Forest | 0.1493 ± 0.0016 |
 
-## 1. Dataset Summary
+Random Forest and tuned HistGB are statistically tied. I chose Random Forest because it is simpler and needed no tuning (a tuning grid showed a plateau).
 
-- **Total Records:** 57,480  
-- **Geographic Coverage:** Pan-India (multi-city)  
-- **Sources:** Multiple major Indian used-car platforms  
-- **Duplicates:** Fully removed via cross-source deduplication  
-- **Missing Values:** 0%  
-- **Primary Use Case:**  
-  - Price prediction (regression)  
-  - Automotive market analytics  
-  - Feature engineering research  
-  - ML benchmarking on Indian market data
+## Method
+1. Cleaning with fixed rules only (safe before the split)
+2. Train/test split first; all learned steps (imputing, scaling, encoding) are inside a scikit-learn Pipeline
+3. Target is log1p(price), so errors are percentages
+4. Split conformal prediction, calibrated separately for 5 predicted-price groups
 
----
+## Data
+Dataset: Shashi (2025), *Indian Used Car Listings Dataset (57,480 Records)*, Kaggle: <paste link>.
+Place `indian_used_cars_raw_57480.csv` in `data/`. I used the raw file, because the numeric file encodes brand using average price, which leaks the target.
 
-## 2. Files Included
+Issues found and fixed: 28 missing fuel types, 77 impossible mileage values (over 100,000 km/year), duplicate brand spellings, a fake body type "15" (relabelled "Unknown"), and repeated model name formats.
 
-This release contains **two aligned versions** of the same dataset:
+## Limitations
+- Rare luxury brands (fewer than 10 listings, like Rolls-Royce) are predicted poorly
+- Some listing prices look like data entry errors, which limits accuracy for cheap cars
+- Intervals are widest for the cheapest cars (about ±68%)
+- `city` added no accuracy and was dropped
 
-### 1) `indian_used_cars_raw_57480.csv`
-- Human-readable dataset
-- Cleaned categorical labels
-- Suitable for:
-  - Exploratory Data Analysis (EDA)
-  - Visualization
-  - Manual feature engineering
-  - Academic research
-  - Business analytics
-
-### 2) `indian_used_cars_numeric_57058.csv`
-- Fully numeric, **model-ready** dataset
-- Suitable for:
-  - Linear regression
-  - Random Forest, XGBoost
-  - Neural networks
-  - End-to-end ML pipelines
-
-Both files have identical row order and alignment.
-
----
-
-## 3. Final Feature Set (10 Core Attributes)
-
-Each row represents one unique used-car listing with the following fields:
-
-| Column | Description |
-|--------|-------------|
-| `price` | Listed selling price |
-| `manufacturing_year` | Year of manufacture |
-| `model` | Vehicle model |
-| `km_driven` | Odometer reading (in kilometers) |
-| `fuel_type` | Petrol / Diesel / CNG / Electric |
-| `transmission_type` | Manual / Automatic |
-| `brand` | Manufacturer brand |
-| `city` | Listing city |
-| `body_type` | Hatchback / Sedan / SUV / etc. |
-| `number_of_owners` | Previous ownership count |
-
-These features represent the **core determinants of resale value** used in real-world automotive valuation systems.
-
----
-
-## 4. Data Cleaning & Normalization
-
-The raw scraped data was systematically cleaned and standardized:
-
-- Label normalization  
-  - e.g., `"MINI"` → `"Mini"`  
-  - `"four or more owners"` → `"More than 4 Owners"`
-- Category consolidation across sources  
-- Format unification for:
-  - ownership labels  
-  - fuel types  
-  - transmission types  
-  - city names  
-- Strict removal of:
-  - duplicate listings  
-  - mirrored city listings  
-  - repeated platform entries  
-- Final dataset contains **only fully valid rows**
-
----
-
-## 5. Numeric Encoding Strategy (ML-Ready File)
-
-The numeric dataset was generated using the following encoding rules:
-
-### • Ordinal Encoding (Price-Influenced Ranking)
-Used where **relative value ordering is meaningful for prediction**, for example:
-- Ordinality was based on average listing price of each brand.
-- Brand (economy -> premium -> luxury segments)
-- Ownership categories
-
-> Note: This is a **modeling assumption**, not an inherent ordinal property, applied strictly for regression performance.
-
-### • One-Hot Encoding (Nominal Variables)
-Used for:
-- Fuel type  
-- Transmission type  
-- Body type  
-
-### • Existing Numeric Fields Preserved
-- `price`
-- `km_driven`
-- `manufacturing_year`
-
-
----
-
-## 6. Data Collection Overview (High-Level)
-
-- Data was collected using a **custom Python scraping pipeline**.
-- Structured listing metadata was extracted directly from **machine-readable sources (JSON-LD / API responses)**.
-- A **breadth-first geographic strategy** was used to maximize coverage.
-- Multi-source merging was performed.
-- Cross-platform duplicates were removed using strict matching keys.
-
-All processing steps were designed for:
-- reproducibility  
-- schema consistency  
-- low noise  
-- ML usability
-
----
-
-## 7. Recommended Use Cases
-
-- Used-car price prediction models  
-- Brand-wise and city-wise valuation analysis  
-- Mileage vs depreciation studies  
-- Fuel-type price behavior analysis  
-- Ownership impact on resale pricing  
-- Automated valuation model (AVM) benchmarks  
-- Feature importance and explainability research
-
----
-
-## 8. Example Usage (Kaggle)
-
-```python
-import pandas as pd
-
-df = pd.read_csv("/kaggle/input/indian-used-cars/indian_used_cars_raw_57480.csv")
-df.head()
-
-```
-
-For modeling:
-```python
-X = pd.read_csv("/kaggle/input/indian-used-cars/indian_used_cars_numeric_57480.csv").to_numpy()
-```
-
-## 9. Data Ethics & Usage
-
-- All information was derived from publicly available vehicle listing data.  
-
-- No personal seller information was collected.  
-
-- This dataset is shared strictly for research and educational purposes.  
-
-- Original platforms retain ownership of individual listings.  
-
-## 10. Citation
-
-If you use this dataset in projects, publications, or notebooks, please cite as:  
-
-> Shashi (2025). Indian Used Car Listings Dataset (57,480 Records).  
-
-## 11. Versioning  
-- v1.0 - Initial public release  
-    - 57,480 clean, deduplicated records.
-    - Raw + ML-ready numeric versions.  
-    - Multi-source integration.  
-
-## Final Note:
-This dataset was built end-to-end:  
-**collection -> normalization -> deduplication -> encoding -> ML-ready release.**  
-
-A public dataset did not exist for the Indian market, it was created.  
+## How to run
+pip install -r requirements.txt, then run 02_clean.py, 03_baseline.py, 04_compare.py, 05_intervals.py, 06_final_test.py in that order.
