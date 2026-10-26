@@ -57,6 +57,10 @@ pipe = Pipeline([
 
 pipe.fit(X_fit, y_fit)
 
+names = pipe.named_steps["prep"].get_feature_names_out()
+print("Number of columns:", len(names))
+print([n for n in names if "Rolls" in n or "Lamborghini" in n])       
+
 cal_pred = pipe.predict(X_cal)
 val_pred = pipe.predict(X_val)
 cal_err = np.abs(y_cal - cal_pred).to_numpy()
@@ -76,3 +80,87 @@ inside = val_err <= q_bins[val_bin]
 print("Overall coverage:", inside.mean())
 for b in range(5):
     print(f"group {b}: coverage = {inside[val_bin == b].mean():.3f}, q = {q_bins[b]:.3f}")
+
+    val_pred = pipe.predict(X_val)
+errors = X_val.copy()
+errors["actual"] = np.expm1(y_val)
+errors["predicted"] = np.expm1(val_pred)
+errors["abs_error_log"] = np.abs(y_val - val_pred)
+
+print(errors.nlargest(15, "abs_error_log")[
+    ["brand", "model", "manufacturing_year", "km_driven", "city",
+     "actual", "predicted", "abs_error_log"]])
+
+print(errors.groupby("brand")["abs_error_log"].agg(["mean", "count"])
+      .query("count >= 100").sort_values("mean", ascending=False).head(10))
+
+pd.set_option("display.max_columns", None)
+pd.set_option("display.width", 200)
+
+# 1. Show the worst cars again with all columns
+print(errors.nlargest(15, "abs_error_log")[
+    ["brand", "model", "actual", "predicted", "abs_error_log"]])
+
+# 2. How many cars does each of these brands have in the training data?
+print(X_fit["brand"].value_counts().loc[["Rolls-Royce", "Lamborghini"]])
+print(X_fit["brand"].value_counts().tail(15))
+
+def make_prep():
+    return ColumnTransformer([
+        ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
+                          ("sc", StandardScaler())]), num_cols),
+        ("brand", OneHotEncoder(handle_unknown="ignore", sparse_output=False), ["brand"]),
+        ("cat", OneHotEncoder(handle_unknown="ignore", min_frequency=20, sparse_output=False),
+         ["model", "fuel_type", "transmission_type", "city", "bodytype"]),
+    ])
+
+pipe = Pipeline([
+    ("prep", make_prep()),
+    ("model", RandomForestRegressor(n_estimators=100, min_samples_leaf=2,
+                                    n_jobs=-1, random_state=42)),
+])
+pipe.fit(X_fit, y_fit)
+
+names = pipe.named_steps["prep"].get_feature_names_out()
+print("Number of columns:", len(names))
+print([n for n in names if "Rolls" in n or "Lamborghini" in n])
+
+cal_pred = pipe.predict(X_cal)
+val_pred = pipe.predict(X_val)
+print("Avg calibration error:", np.abs(y_cal - cal_pred).mean())
+
+# ---------- 4. One q per predicted-price group ----------
+cal_err = np.abs(y_cal - cal_pred).to_numpy()
+val_err = np.abs(y_val - val_pred).to_numpy()
+
+edges = np.quantile(cal_pred, [0.2, 0.4, 0.6, 0.8])
+cal_bin = np.digitize(cal_pred, edges)
+val_bin = np.digitize(val_pred, edges)
+
+q_bins = np.array([np.quantile(cal_err[cal_bin == b], 0.90) for b in range(5)])
+print("q per group:", q_bins.round(3))
+
+inside = val_err <= q_bins[val_bin]
+print("Overall coverage:", inside.mean())
+for b in range(5):
+    print(f"group {b}: coverage = {inside[val_bin == b].mean():.3f}, q = {q_bins[b]:.3f}")
+
+# ---------- 5. Error analysis ----------
+errors = X_val.copy()
+errors["actual"] = np.expm1(y_val)
+errors["predicted"] = np.expm1(val_pred)
+errors["abs_error_log"] = np.abs(y_val - val_pred)
+
+print(errors.nlargest(15, "abs_error_log")[
+    ["brand", "model", "actual", "predicted", "abs_error_log"]])
+
+
+from sklearn.inspection import permutation_importance
+
+r = permutation_importance(
+    pipe, X_val, y_val,
+    scoring="neg_mean_absolute_error",
+    n_repeats=5, random_state=0,
+)
+imp = pd.Series(r.importances_mean, index=X_val.columns).sort_values(ascending=False)
+print(imp)
