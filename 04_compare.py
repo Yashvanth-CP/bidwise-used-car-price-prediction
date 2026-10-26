@@ -7,6 +7,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
+import matplotlib.pyplot as plt
+from sklearn.dummy import DummyRegressor
 
 
 df = pd.read_csv("data/cars_clean.csv")
@@ -58,3 +60,22 @@ for name, model in configs.items():
     scores = -cross_val_score(pipe, X_train, y_train, cv=cv,
                               scoring="neg_mean_absolute_error")
     print(f"{name}: MAE = {scores.mean():.4f} ± {scores.std():.4f}")
+
+
+
+
+dummy = Pipeline([("prep", make_prep()), ("model", DummyRegressor(strategy="median"))])
+scores = -cross_val_score(dummy, X_train, y_train, cv=cv, scoring="neg_mean_absolute_error")
+print(f"dummy: MAE = {scores.mean():.4f} ± {scores.std():.4f}")
+
+    # Chart 4: model comparison (5-fold CV MAE on the training set, from 04_compare.py)
+models = ["HistGB (default)", "Ridge", "HistGB (tuned)", "Random Forest"]
+scores = [0.1744, 0.1621, 0.1504, 0.1493]
+stds   = [0.0009, 0.0016, 0.0015, 0.0016]
+
+plt.figure(figsize=(7, 4))
+plt.barh(models, scores, xerr=stds, color="steelblue")
+plt.xlabel("MAE on log scale (lower is better), mean ± std over 5 folds")
+plt.title("Model comparison (cross-validation)")
+plt.savefig("reports/figures/model_comparison.png", dpi=150, bbox_inches="tight")
+plt.close()
