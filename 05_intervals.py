@@ -164,3 +164,55 @@ r = permutation_importance(
 )
 imp = pd.Series(r.importances_mean, index=X_val.columns).sort_values(ascending=False)
 print(imp)
+
+
+pd.set_option("display.max_rows", None)
+print(imp)    # the full list
+
+print(X_fit["bodytype"].value_counts())
+print(df.groupby("bodytype")["price"].median().sort_values())
+
+print(X_fit["bodytype"].value_counts())
+
+def build_pipe(drop=()):
+    nums = [c for c in num_cols if c not in drop]
+    cats = [c for c in ["model", "fuel_type", "transmission_type", "city", "bodytype"]
+            if c not in drop]
+    prep = ColumnTransformer([
+        ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
+                          ("sc", StandardScaler())]), nums),
+        ("brand", OneHotEncoder(handle_unknown="ignore", sparse_output=False), ["brand"]),
+        ("cat", OneHotEncoder(handle_unknown="ignore", min_frequency=20,
+                              sparse_output=False), cats),
+    ])
+    return Pipeline([("prep", prep),
+                     ("model", RandomForestRegressor(n_estimators=100, min_samples_leaf=2,
+                                                     n_jobs=-1, random_state=42))])
+
+for drop in [(), ("bodytype",), ("city",)]:
+    p = build_pipe(drop)
+    p.fit(X_fit, y_fit)
+    err = np.abs(y_val - p.predict(X_val)).mean()
+    print(f"drop {drop or 'nothing'}: validation MAE = {err:.4f}")
+
+def build_pipe(drop=(), **rf_params):
+    nums = [c for c in num_cols if c not in drop]
+    cats = [c for c in ["model", "fuel_type", "transmission_type", "city", "bodytype"]
+            if c not in drop]
+    prep = ColumnTransformer([
+        ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
+                          ("sc", StandardScaler())]), nums),
+        ("brand", OneHotEncoder(handle_unknown="ignore", sparse_output=False), ["brand"]),
+        ("cat", OneHotEncoder(handle_unknown="ignore", min_frequency=20,
+                              sparse_output=False), cats),
+    ])
+    params = dict(n_estimators=100, min_samples_leaf=2, n_jobs=-1, random_state=42)
+    params.update(rf_params)
+    return Pipeline([("prep", prep), ("model", RandomForestRegressor(**params))])
+
+for leaf in [1, 2, 5]:
+    for mf in [0.3, 0.5, 1.0]:
+        p = build_pipe(drop=("city",), min_samples_leaf=leaf, max_features=mf)
+        p.fit(X_fit, y_fit)
+        err = np.abs(y_val - p.predict(X_val)).mean()
+        print(f"min_samples_leaf={leaf}, max_features={mf}: MAE = {err:.4f}")

@@ -2,13 +2,11 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+
 df = pd.read_csv("data/indian_used_cars_raw_57480.csv")
 df = df.drop(columns=["Unnamed: 0"])
 
-# 1. km_driven text -> number 
-
 df["km_driven"] = df["km_driven"].str.replace(",", "").astype(float)
-
 
 # Fix brand spelling 
 brand_map = {
@@ -16,6 +14,13 @@ brand_map = {
     "Mahindra-Renault": "Mahindra Renault",
 }
 df["brand"] = df["brand"].replace(brand_map)
+
+# ---------- NEW: fix the fake body type "15" ----------
+df["bodytype"] = df["bodytype"].astype(str)
+print(df[df["bodytype"] == "15"][["brand", "model", "manufacturing_year", "price"]])  # look first
+df["bodytype"] = df["bodytype"].replace({"15": "Unknown"})
+print(df["bodytype"].value_counts().tail(5))   # check it worked
+# ------------------------------------------------------
 
 # 3. removing impossible km values 
 df["car_age"] = 2026 - df["manufacturing_year"]
@@ -65,6 +70,7 @@ print((df["model"].value_counts() < 5).sum())
 df.to_csv("data/cars_clean.csv", index=False)
 
 X = df.drop(columns=["price", "km_per_year"])
+
 y = np.log1p(df["price"])
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
